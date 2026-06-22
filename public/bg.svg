@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#17120f"/>
+      <stop offset="0.45" stop-color="#0b0b0a"/>
+      <stop offset="1" stop-color="#1b1512"/>
+    </linearGradient>
+    <radialGradient id="r" cx="68%" cy="36%" r="46%">
+      <stop offset="0" stop-color="#f0b35c" stop-opacity=".22"/>
+      <stop offset=".55" stop-color="#d95645" stop-opacity=".10"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1600" height="1000" fill="url(#g)"/>
+  <rect width="1600" height="1000" fill="url(#r)"/>
+  <path d="M1080 140c110 45 180 170 158 294-28 159-175 261-336 233-129-22-229-123-253-249-20-104 23-211 109-274 88-65 211-47 322-4z" fill="#f4efe3" opacity=".08"/>
+  <path d="M1026 242c60 16 111 79 96 146-14 63-81 99-143 86-54-11-97-54-105-108-9-61 28-115 82-128 23-5 47-2 70 4z" fill="#f4efe3" opacity=".10"/>
+  <g opacity=".10" stroke="#fff" stroke-width="1">
+    <path d="M0 160h1600M0 320h1600M0 480h1600M0 640h1600M0 800h1600"/>
+    <path d="M160 0v1000M320 0v1000M480 0v1000M640 0v1000M800 0v1000M960 0v1000M1120 0v1000M1280 0v1000M1440 0v1000"/>
+  </g>
+</svg>
