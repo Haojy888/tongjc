@@ -19,6 +19,8 @@ import {
   Sparkles,
   Target,
   TrendingUp,
+  Upload,
+  X,
   Zap
 } from 'lucide-react';
 import { analyzeMessage, fetchApiConfig, fetchFrameworks, saveApiConfig, searchKnowledge } from './lib/api';
@@ -56,6 +58,175 @@ function signalText(level) {
 
 function nowTime() {
   return new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+}
+
+function compactText(value, limit = 520) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  return text.length > limit ? `${text.slice(0, limit)}...` : text;
+}
+
+function guessMessageType(speaker, ownName, otherName) {
+  const value = String(speaker || '').trim();
+  const normalized = value.toLowerCase();
+  const mine = String(ownName || '').trim().toLowerCase();
+  const other = String(otherName || '').trim().toLowerCase();
+
+  if (!value) return 'her';
+  if (['我', '本人', '自己', 'me', 'self'].includes(normalized)) return 'me';
+  if (mine && (normalized === mine || normalized.includes(mine))) return 'me';
+  if (['她', '他', 'ta', '对方', '女生', '男生', '好友'].includes(normalized)) return 'her';
+  if (other && (normalized === other || normalized.includes(other))) return 'her';
+  return 'her';
+}
+
+function normalizeWechatLine(line) {
+  return String(line || '')
+    .replace(/\u200b/g, '')
+    .replace(/^\s*[|｜]\s*/, '')
+    .trim();
+}
+
+function shouldSkipImportLine(line) {
+  return !line ||
+    /^-{2,}$/.test(line) ||
+    /^=+$/.test(line) ||
+    /^(以下为|以上为|微信聊天记录|聊天记录|消息记录)/.test(line);
+}
+
+function tryParseJsonChat(raw, ownName, otherName) {
+  const text = raw.trim();
+  if (!text.startsWith('{') && !text.startsWith('[')) return [];
+
+  try {
+    const data = JSON.parse(text);
+    const list = Array.isArray(data) ? data : (data.messages || data.records || data.chat || []);
+    if (!Array.isArray(list)) return [];
+
+    return list
+      .map((item) => {
+        if (!item || typeof item !== 'object') return null;
+        const speaker = item.sender || item.speaker || item.from || item.name || item.role || '';
+        const content = item.text || item.content || item.message || item.msg || '';
+        const recordText = compactText(content);
+        if (!recordText) return null;
+        return {
+          type: guessMessageType(speaker, ownName, otherName),
+          speaker: String(speaker || ''),
+          text: recordText,
+          time: String(item.time || item.createdAt || item.date || '')
+        };
+      })
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function parseWechatText(raw, ownName = '我', otherName = '她') {
+  const jsonRecords = tryParseJsonChat(raw, ownName, otherName);
+  if (jsonRecords.length) return jsonRecords;
+
+  const records = [];
+  let current = null;
+  let pendingTime = '';
+
+  const pushCurrent = () => {
+    if (!current) return;
+    const text = compactText(current.text);
+    if (text) records.push({ ...current, text });
+    current = null;
+  };
+
+  String(raw || '').split(/\r?\n/).forEach((sourceLine) => {
+    const line = normalizeWechatLine(sourceLine);
+    if (shouldSkipImportLine(line)) return;
+
+    const timeOnly = line.match(/^(\d{4}[/-]\d{1,2}[/-]\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?|\d{1,2}:\d{2}(?::\d{2})?)$/);
+    if (timeOnly) {
+      pendingTime = timeOnly[1];
+      return;
+    }
+
+    const speakerTime = line.match(/^(.{1,28}?)\s+(\d{4}[/-]\d{1,2}[/-]\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?)$/);
+    if (speakerTime) {
+      pushCurrent();
+      current = {
+        type: guessMessageType(speakerTime[1], ownName, otherName),
+        speaker: speakerTime[1].trim(),
+        text: '',
+        time: speakerTime[2]
+      };
+      pendingTime = '';
+      return;
+    }
+
+    const bracketLine = line.match(/^\[?(\d{4}[/-]\d{1,2}[/-]\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?)\]?\s+([^：:]{1,28})[：:]\s*(.*)$/);
+    if (bracketLine) {
+      pushCurrent();
+      current = {
+        type: guessMessageType(bracketLine[2], ownName, otherName),
+        speaker: bracketLine[2].trim(),
+        text: bracketLine[3],
+        time: bracketLine[1]
+      };
+      return;
+    }
+
+    const colonLine = line.match(/^([^：:]{1,28})[：:]\s*(.*)$/);
+    if (colonLine && !/^https?:\/\//i.test(line)) {
+      pushCurrent();
+      current = {
+        type: guessMessageType(colonLine[1], ownName, otherName),
+        speaker: colonLine[1].trim(),
+        text: colonLine[2],
+        time: pendingTime
+      };
+      pendingTime = '';
+      return;
+    }
+
+    if (!current) {
+      current = {
+        type: 'her',
+        speaker: otherName || '对方',
+        text: line,
+        time: pendingTime
+      };
+      pendingTime = '';
+      return;
+    }
+
+    current.text = `${current.text}\n${line}`.trim();
+  });
+
+  pushCurrent();
+  return records;
+}
+
+function recordsToContext(records) {
+  return records.map((record) => ({
+    source: 'wechat-import',
+    time: record.time || '',
+    her: record.type === 'her' ? record.text : undefined,
+    my: record.type === 'me' ? record.text : undefined
+  }));
+}
+
+function buildWechatImportSummary(records, otherName = '对方') {
+  const meCount = records.filter((item) => item.type === 'me').length;
+  const herCount = records.length - meCount;
+  const firstTime = records.find((item) => item.time)?.time || '未识别';
+  const lastTime = [...records].reverse().find((item) => item.time)?.time || '未识别';
+  const recent = records
+    .slice(-18)
+    .map((item) => `${item.type === 'me' ? '我' : otherName || '对方'}：${item.text}`)
+    .join('\n');
+
+  return [
+    `已导入微信聊天记录：共 ${records.length} 条；我方 ${meCount} 条，对方 ${herCount} 条；时间范围 ${firstTime} 至 ${lastTime}。`,
+    '分析时请把这些历史当成真实上下文，重点看最近互动趋势、谁主动开启话题、谁在持续投入。',
+    `最近聊天片段：\n${recent}`
+  ].join('\n');
 }
 
 function SignalCanvas({ score = 58 }) {
@@ -105,7 +276,7 @@ function SignalCanvas({ score = 58 }) {
   return <canvas className="signal-canvas" ref={ref} width="224" height="96" aria-hidden="true" />;
 }
 
-function Header({ onFrameworks, onSearch, onClear, onApiSettings, score, apiConfig }) {
+function Header({ onFrameworks, onSearch, onClear, onApiSettings, onImportChat, score, apiConfig }) {
   const activeProvider = apiConfig?.providers?.[apiConfig.activeProvider];
   const providerLabel = activeProvider?.label || apiConfig?.activeProvider || 'API';
   const providerReady = Boolean(activeProvider?.hasKey);
@@ -134,6 +305,10 @@ function Header({ onFrameworks, onSearch, onClear, onApiSettings, score, apiConf
         </button>
         <button type="button" className="icon-button" onClick={onSearch} title="搜索知识库">
           <Search size={16} />
+        </button>
+        <button type="button" className="ghost-button" onClick={onImportChat}>
+          <Upload size={15} />
+          导入微信
         </button>
         <button type="button" className="ghost-button" onClick={onFrameworks}>
           <BookOpen size={15} />
@@ -417,6 +592,126 @@ function ApiSettingsModal({ open, config, onClose, onSaved }) {
   );
 }
 
+function WechatImportModal({ open, onClose, onImport }) {
+  const [rawText, setRawText] = useState('');
+  const [ownName, setOwnName] = useState('我');
+  const [otherName, setOtherName] = useState('对方');
+  const [replaceExisting, setReplaceExisting] = useState(false);
+  const [fileName, setFileName] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    setFileName('');
+  }, [open]);
+
+  const records = useMemo(() => parseWechatText(rawText, ownName, otherName), [rawText, ownName, otherName]);
+  const meCount = records.filter((item) => item.type === 'me').length;
+  const herCount = records.length - meCount;
+
+  if (!open) return null;
+
+  const readFile = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setFileName(file.name);
+    const text = await file.text();
+    setRawText(text);
+    event.target.value = '';
+  };
+
+  const submit = (event) => {
+    event.preventDefault();
+    if (!records.length) return;
+    onImport({ records, ownName, otherName, replaceExisting });
+    setRawText('');
+    setFileName('');
+    onClose();
+  };
+
+  return (
+    <div className="modal-layer" role="dialog" aria-modal="true" aria-label="导入微信聊天记录">
+      <button type="button" className="modal-backdrop" onClick={onClose} aria-label="关闭导入" />
+      <form className="import-modal" onSubmit={submit}>
+        <div className="modal-head">
+          <div>
+            <p>WeChat Context</p>
+            <h2>导入微信聊天记录</h2>
+            <span>支持粘贴聊天文本，或上传 txt/csv/json/html 文件；只在浏览器内解析，不上传文件本身。</span>
+          </div>
+          <button type="button" className="icon-button" onClick={onClose} title="关闭">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="import-grid">
+          <section className="import-editor">
+            <div className="import-controls">
+              <label>
+                <span>你的昵称</span>
+                <input value={ownName} onChange={(event) => setOwnName(event.target.value)} placeholder="我" />
+              </label>
+              <label>
+                <span>对方昵称</span>
+                <input value={otherName} onChange={(event) => setOtherName(event.target.value)} placeholder="对方" />
+              </label>
+            </div>
+
+            <label className="upload-drop">
+              <Upload size={17} />
+              <strong>{fileName || '选择聊天文件'}</strong>
+              <span>txt / csv / json / html</span>
+              <input type="file" accept=".txt,.csv,.json,.html,.htm,text/*,application/json" onChange={readFile} />
+            </label>
+
+            <textarea
+              value={rawText}
+              onChange={(event) => setRawText(event.target.value)}
+              placeholder={'也可以直接粘贴，例如：\n我：刚到家了\n对方：辛苦啦，今天还挺开心的\n2026-06-22 23:12 对方：下次再约'}
+            />
+
+            <label className="check-row">
+              <input
+                type="checkbox"
+                checked={replaceExisting}
+                onChange={(event) => setReplaceExisting(event.target.checked)}
+              />
+              <span>导入后替换当前聊天，而不是追加</span>
+            </label>
+          </section>
+
+          <section className="import-preview">
+            <div className="import-stats">
+              <div><b>{records.length}</b><span>识别消息</span></div>
+              <div><b>{herCount}</b><span>{otherName || '对方'}</span></div>
+              <div><b>{meCount}</b><span>我</span></div>
+            </div>
+
+            <div className="preview-list">
+              {records.length === 0 ? (
+                <p className="preview-empty">粘贴聊天内容后，这里会预览识别出的最近消息。</p>
+              ) : records.slice(-8).map((record, index) => (
+                <article className={`preview-message ${record.type}`} key={`${record.text}-${index}`}>
+                  <span>{record.type === 'me' ? '我' : otherName || '对方'}</span>
+                  <p>{record.text}</p>
+                  {record.time && <em>{record.time}</em>}
+                </article>
+              ))}
+            </div>
+          </section>
+        </div>
+
+        <div className="modal-actions">
+          <button type="button" className="ghost-button" onClick={onClose}>取消</button>
+          <button type="submit" className="send-button" disabled={!records.length}>
+            <Upload size={16} />
+            导入上下文
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function AiBadge({ ai }) {
   if (ai?.provider === 'deepseek') {
     return <span className="ai-badge deepseek"><Sparkles size={12} />DeepSeek 增强</span>;
@@ -426,6 +721,9 @@ function AiBadge({ ai }) {
   }
   if (ai?.provider === 'idle') {
     return <span className="ai-badge idle"><CircleDot size={12} />Standby</span>;
+  }
+  if (ai?.provider === 'imported') {
+    return <span className="ai-badge imported"><Upload size={12} />已导入上下文</span>;
   }
   if (ai?.selectedProvider) {
     return <span className="ai-badge local"><CircleDot size={12} />{ai.selectedProvider} 未接通</span>;
@@ -677,13 +975,13 @@ function AnalysisPanel({ analysis, loading, draft, onDraftChange, onSendReply, o
       <div className="analysis-scroll" onPointerMove={handleCardGlow}>
         {loading ? <LoadingCards /> : analysis.ai?.provider === 'idle' ? <WaitingPanel /> : (
           <>
-            <ActionDecisionCard decision={analysis.actionDecision} analysis={analysis} />
-            <SignalCard analysis={analysis} />
+            {analysis.ai?.provider !== 'imported' && <ActionDecisionCard decision={analysis.actionDecision} analysis={analysis} />}
+            {analysis.ai?.provider !== 'imported' && <SignalCard analysis={analysis} />}
             <ContextCard insight={analysis.contextInsight} />
             <CommentaryCard analysis={analysis} />
-            <BreakdownCard good={analysis.goodPoints} warns={analysis.warnPoints} />
-            <Suggestions suggestions={analysis.suggestions} onUse={onUseSuggestion} />
-            <KnowledgeCard items={analysis.bookKnowledge} />
+            {analysis.ai?.provider !== 'imported' && <BreakdownCard good={analysis.goodPoints} warns={analysis.warnPoints} />}
+            {analysis.ai?.provider !== 'imported' && <Suggestions suggestions={analysis.suggestions} onUse={onUseSuggestion} />}
+            {analysis.ai?.provider !== 'imported' && <KnowledgeCard items={analysis.bookKnowledge} />}
             <ReplyGate draft={draft} onDraftChange={onDraftChange} onSend={onSendReply} />
           </>
         )}
@@ -703,11 +1001,13 @@ function LoadingCards() {
 function App() {
   const [messages, setMessages] = useState([]);
   const [context, setContext] = useState([]);
+  const [importSummary, setImportSummary] = useState('');
   const [analysis, setAnalysis] = useState(fallbackAnalysis);
   const [loading, setLoading] = useState(false);
   const [replyDraft, setReplyDraft] = useState('');
   const [apiConfig, setApiConfig] = useState(null);
   const [apiSettingsOpen, setApiSettingsOpen] = useState(false);
+  const [wechatImportOpen, setWechatImportOpen] = useState(false);
 
   const score = scoreFor(analysis.signal?.level);
 
@@ -727,15 +1027,16 @@ function App() {
 
   const handleAnalyze = async ({ message, background }) => {
     const herMessage = { id: crypto.randomUUID(), type: 'her', text: message, time: nowTime() };
+    const mergedBackground = [importSummary, background].filter(Boolean).join('\n\n');
     setMessages((current) => [...current, herMessage]);
     setLoading(true);
 
     try {
-      const data = await analyzeMessage({ message, background, context });
+      const data = await analyzeMessage({ message, background: mergedBackground, context });
       setAnalysis(data);
       setContext((current) => [...current, {
         her: message,
-        background,
+        background: mergedBackground,
         analysis: {
           signal: data.signal,
           scenario: data.scenario,
@@ -774,9 +1075,40 @@ function App() {
     setReplyDraft('');
   };
 
+  const handleWechatImport = ({ records, otherName, replaceExisting }) => {
+    const importedMessages = records.map((record) => ({
+      id: crypto.randomUUID(),
+      type: record.type,
+      text: record.text,
+      time: record.time || nowTime(),
+      imported: true
+    }));
+    const importedContext = recordsToContext(records);
+    const summary = buildWechatImportSummary(records, otherName);
+
+    setMessages((current) => replaceExisting ? importedMessages : [...current, ...importedMessages]);
+    setContext((current) => replaceExisting ? importedContext : [...current, ...importedContext]);
+    setImportSummary((current) => replaceExisting || !current ? summary : `${current}\n\n${summary}`);
+    setAnalysis({
+      ...fallbackAnalysis,
+      contextInsight: {
+        trend: '已导入',
+        summary: `已导入 ${records.length} 条微信聊天记录。下一次分析会结合这些历史上下文，不再只看最后一句。`,
+        basis: [
+          `对方消息 ${records.filter((item) => item.type === 'her').length} 条`,
+          `你的消息 ${records.filter((item) => item.type === 'me').length} 条`,
+          '最近聊天片段会作为背景传给分析模型'
+        ]
+      },
+      commentary: '聊天记录已经接进来了。接下来粘贴她最新那句话，我会结合导入的历史一起判断趋势和回复强度。',
+      ai: { provider: 'imported' }
+    });
+  };
+
   const clearAll = () => {
     setMessages([]);
     setContext([]);
+    setImportSummary('');
     setAnalysis(fallbackAnalysis);
     setReplyDraft('');
   };
@@ -823,6 +1155,7 @@ function App() {
             onFrameworks={openFrameworks}
             onSearch={openSearch}
             onApiSettings={() => setApiSettingsOpen(true)}
+            onImportChat={() => setWechatImportOpen(true)}
             apiConfig={apiConfig}
           />
           <ChatPanel messages={messages} />
@@ -842,6 +1175,11 @@ function App() {
         config={apiConfig}
         onClose={() => setApiSettingsOpen(false)}
         onSaved={setApiConfig}
+      />
+      <WechatImportModal
+        open={wechatImportOpen}
+        onClose={() => setWechatImportOpen(false)}
+        onImport={handleWechatImport}
       />
     </div>
   );

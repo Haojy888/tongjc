@@ -1304,7 +1304,8 @@ button {
   cursor: default;
 }
 
-.api-modal {
+.api-modal,
+.import-modal {
   position: relative;
   width: min(620px, 100%);
   display: grid;
@@ -1316,6 +1317,10 @@ button {
     linear-gradient(180deg, rgba(255,255,255,0.065), rgba(255,255,255,0.026)),
     rgba(15,16,15,0.98);
   box-shadow: 0 28px 100px rgba(0,0,0,0.58);
+}
+
+.import-modal {
+  width: min(1040px, 100%);
 }
 
 .modal-head {
@@ -1437,6 +1442,220 @@ button {
   margin: 0;
   color: var(--text-2);
   font-size: 12px;
+}
+
+.import-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
+  gap: 14px;
+  min-height: 420px;
+}
+
+.import-editor,
+.import-preview {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.import-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.import-controls label {
+  display: grid;
+  gap: 7px;
+}
+
+.import-controls span {
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.import-controls input,
+.import-editor textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  outline: none;
+  color: var(--text);
+  background: rgba(8,9,8,0.82);
+}
+
+.import-controls input {
+  min-height: 40px;
+  padding: 0 11px;
+}
+
+.import-editor textarea {
+  flex: 1;
+  min-height: 250px;
+  resize: vertical;
+  padding: 12px;
+  line-height: 1.62;
+}
+
+.import-controls input:focus,
+.import-editor textarea:focus {
+  border-color: rgba(240,179,92,0.55);
+  box-shadow: 0 0 0 3px rgba(240,179,92,0.12);
+}
+
+.upload-drop {
+  min-height: 76px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px dashed rgba(240,179,92,0.28);
+  border-radius: var(--radius);
+  color: var(--text);
+  background:
+    linear-gradient(135deg, rgba(240,179,92,0.08), rgba(104,129,242,0.05)),
+    rgba(255,255,255,0.026);
+  cursor: pointer;
+  transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.upload-drop:hover {
+  transform: translateY(-1px);
+  border-color: rgba(240,179,92,0.58);
+  background:
+    linear-gradient(135deg, rgba(240,179,92,0.14), rgba(217,86,69,0.08)),
+    rgba(255,255,255,0.035);
+}
+
+.upload-drop svg {
+  grid-row: span 2;
+  color: var(--accent-2);
+}
+
+.upload-drop strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.upload-drop span {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.upload-drop input {
+  display: none;
+}
+
+.check-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.check-row input {
+  accent-color: var(--accent-2);
+}
+
+.import-preview {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255,255,255,0.026);
+  min-height: 0;
+}
+
+.import-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.import-stats div {
+  min-height: 68px;
+  padding: 11px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: rgba(8,9,8,0.44);
+}
+
+.import-stats b {
+  display: block;
+  color: #fff4df;
+  font-size: 21px;
+  line-height: 1;
+}
+
+.import-stats span {
+  display: block;
+  margin-top: 8px;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.preview-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  padding-right: 4px;
+}
+
+.preview-empty {
+  margin: 18px 2px;
+  color: var(--text-3);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.preview-message {
+  padding: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: rgba(255,255,255,0.035);
+}
+
+.preview-message.me {
+  border-color: rgba(217,86,69,0.24);
+  background: rgba(217,86,69,0.08);
+}
+
+.preview-message span {
+  display: inline-flex;
+  margin-bottom: 5px;
+  color: var(--accent-2);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.preview-message.me span {
+  color: #f2b5a9;
+}
+
+.preview-message p {
+  margin: 0;
+  color: #e7dfd7;
+  font-size: 12px;
+  line-height: 1.58;
+  overflow-wrap: anywhere;
+}
+
+.preview-message em {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-3);
+  font-size: 10px;
+  font-style: normal;
 }
 
 .loading-stack {

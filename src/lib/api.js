@@ -4,7 +4,7 @@ export async function analyzeMessage({ message, context, background }) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       message,
-      context: context.slice(-10),
+      context: context.slice(-80),
       background
     })
   });
