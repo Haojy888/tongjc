@@ -60,6 +60,25 @@ function nowTime() {
   return new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
 }
 
+function useMediaQuery(query) {
+  const getMatches = () => {
+    if (typeof window === 'undefined' || !window.matchMedia) return false;
+    return window.matchMedia(query).matches;
+  };
+  const [matches, setMatches] = useState(getMatches);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined;
+    const media = window.matchMedia(query);
+    const update = () => setMatches(media.matches);
+    update();
+    media.addEventListener?.('change', update);
+    return () => media.removeEventListener?.('change', update);
+  }, [query]);
+
+  return matches;
+}
+
 function compactText(value, limit = 520) {
   const text = String(value || '').replace(/\s+/g, ' ').trim();
   return text.length > limit ? `${text.slice(0, limit)}...` : text;
@@ -943,8 +962,9 @@ function WaitingPanel() {
   );
 }
 
-function AnalysisPanel({ analysis, loading, draft, onDraftChange, onSendReply, onUseSuggestion }) {
+function AnalysisPanel({ analysis, loading, draft, onDraftChange, onSendReply, onUseSuggestion, enableEffects = true }) {
   const handleCardGlow = (event) => {
+    if (!enableEffects) return;
     const card = event.target.closest('.panel-card, .suggestion-card');
     if (!card) return;
     const rect = card.getBoundingClientRect();
@@ -972,7 +992,7 @@ function AnalysisPanel({ analysis, loading, draft, onDraftChange, onSendReply, o
         </div>
         <button type="button" className="icon-button" title="搜索知识库"><Search size={16} /></button>
       </div>
-      <div className="analysis-scroll" onPointerMove={handleCardGlow}>
+      <div className="analysis-scroll" onPointerMove={enableEffects ? handleCardGlow : undefined}>
         {loading ? <LoadingCards /> : analysis.ai?.provider === 'idle' ? <WaitingPanel /> : (
           <>
             {analysis.ai?.provider !== 'imported' && <ActionDecisionCard decision={analysis.actionDecision} analysis={analysis} />}
@@ -1008,6 +1028,7 @@ function App() {
   const [apiConfig, setApiConfig] = useState(null);
   const [apiSettingsOpen, setApiSettingsOpen] = useState(false);
   const [wechatImportOpen, setWechatImportOpen] = useState(false);
+  const preferStaticEffects = useMediaQuery('(hover: none), (pointer: coarse), (max-width: 760px), (prefers-reduced-motion: reduce)');
 
   const score = scoreFor(analysis.signal?.level);
 
@@ -1128,24 +1149,26 @@ function App() {
   return (
     <div className="page-shell">
       <div className="photo-backdrop" aria-hidden="true">
-        <Lightfall
-          colors={['#EF4444', '#F97316', '#3f53f4']}
-          backgroundColor="#120b08"
-          speed={0.55}
-          streakCount={5}
-          streakWidth={0.9}
-          streakLength={1.2}
-          glow={0.95}
-          density={0.72}
-          twinkle={0.85}
-          zoom={2.6}
-          backgroundGlow={0.85}
-          opacity={0.62}
-          mouseInteraction
-          mouseStrength={0.8}
-          mouseRadius={0.72}
-          mixBlendMode="screen"
-        />
+        {!preferStaticEffects && (
+          <Lightfall
+            colors={['#EF4444', '#F97316', '#3f53f4']}
+            backgroundColor="#120b08"
+            speed={0.55}
+            streakCount={5}
+            streakWidth={0.9}
+            streakLength={1.2}
+            glow={0.95}
+            density={0.72}
+            twinkle={0.85}
+            zoom={2.6}
+            backgroundGlow={0.85}
+            opacity={0.62}
+            mouseInteraction
+            mouseStrength={0.8}
+            mouseRadius={0.72}
+            mixBlendMode="screen"
+          />
+        )}
       </div>
       <div className="app-frame">
         <section className="main-column">
@@ -1168,6 +1191,7 @@ function App() {
           onDraftChange={setReplyDraft}
           onSendReply={handleSendReply}
           onUseSuggestion={setReplyDraft}
+          enableEffects={!preferStaticEffects}
         />
       </div>
       <ApiSettingsModal

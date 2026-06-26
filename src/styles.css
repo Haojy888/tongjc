@@ -1750,6 +1750,37 @@ button {
   }
 }
 
+@media (hover: none), (pointer: coarse), (max-width: 760px), (prefers-reduced-motion: reduce) {
+  .panel-card,
+  .suggestion-card {
+    animation: none;
+    box-shadow: 0 8px 22px rgba(0,0,0,0.18);
+  }
+
+  .panel-card::before,
+  .panel-card::after,
+  .suggestion-card::before,
+  .suggestion-card::after {
+    display: none;
+  }
+
+  .panel-card:hover,
+  .suggestion-card:hover {
+    border-color: var(--line);
+    box-shadow: 0 8px 22px rgba(0,0,0,0.18);
+  }
+
+  .icon-button:hover,
+  .ghost-button:hover,
+  .api-pill:hover,
+  .suggestion-card button:hover,
+  .reply-actions button:hover,
+  .context-toggle:hover,
+  .send-button:hover:not(:disabled) {
+    transform: none;
+  }
+}
+
 @media (max-width: 760px) {
   .app-header {
     align-items: flex-start;

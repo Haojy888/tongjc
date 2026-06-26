@@ -11,7 +11,7 @@
   position: relative;
   transform: translateZ(0);
   perspective: 900px;
-  touch-action: none;
+  touch-action: pan-y;
 }
 
 .holo-behind {
@@ -119,5 +119,27 @@
 
   .holo-shine {
     animation: none;
+  }
+}
+
+@media (hover: none), (pointer: coarse), (max-width: 760px) {
+  .holo-tilt {
+    touch-action: pan-y;
+    perspective: none;
+  }
+
+  .holo-shell,
+  .holo-content {
+    transform: none;
+  }
+
+  .holo-shine {
+    animation: none;
+    opacity: 0.08;
+  }
+
+  .holo-glare,
+  .holo-behind {
+    opacity: 0.12;
   }
 }

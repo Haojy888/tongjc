@@ -63,6 +63,7 @@ function HoloTilt({
   }, [animate]);
 
   const moveTo = useCallback((event) => {
+    if (event.pointerType && event.pointerType !== 'mouse') return;
     const wrap = wrapRef.current;
     if (!wrap) return;
     const rect = wrap.getBoundingClientRect();
